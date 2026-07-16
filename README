@@ -1,0 +1,12 @@
+LuaSTG Retro LuaJIT 
+---------------------------
+
+* CMake support for Windows and MSVC (x86, AMD64, and ARM64).
+* UTF-8 paths and environment strings in the Windows `io` and `os` libraries.
+* The Lua 5.4 `utf8` library.
+* The Lua 5.4 `string.pack`, `string.packsize`, and `string.unpack` functions,
+  exposed through `luaopen_string_pack` for the host application to register.
+* `goto` and label syntax disabled so `goto` can be used as an identifier.
+* The `std.fs` filesystem library used by LuaSTG.
+
+The CMake build currently targets Windows with MSVC.
