@@ -1,5 +1,4 @@
-LuaSTG Retro LuaJIT 
----------------------------
+# LuaSTG Retro LuaJIT 
 
 * CMake support for Windows and MSVC (x86, AMD64, and ARM64).
 * UTF-8 paths and environment strings in the Windows `io` and `os` libraries.
