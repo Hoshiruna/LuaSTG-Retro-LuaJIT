@@ -404,6 +404,8 @@ PRIVATE
 )
 
 if (NOT WIN32)
+    target_compile_definitions(lua51_static PRIVATE LUAJIT_UNWIND_EXTERNAL)
+    target_compile_definitions(lua51 PRIVATE LUAJIT_UNWIND_EXTERNAL)
     target_link_libraries(lua51_static PRIVATE m ${CMAKE_DL_LIBS})
     target_link_libraries(lua51 PRIVATE m ${CMAKE_DL_LIBS})
 endif ()
