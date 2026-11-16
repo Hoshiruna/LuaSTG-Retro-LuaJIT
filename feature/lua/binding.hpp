@@ -4,6 +4,7 @@
 #include <string>
 #include <optional>
 #include <limits>
+#include <type_traits>
 #include "lua.hpp"
 
 namespace lua {
@@ -224,51 +225,37 @@ namespace lua {
 
         // access
 
-        template<typename T> T at(stack_index const index) const noexcept;
-        template<> bool at(stack_index const index) const noexcept {
-            return lua_toboolean(m_state, index.value()) == 0 ? false : true;
-        }
-        template<> int8_t at(stack_index const index) const noexcept {
-            return static_cast<int8_t>(luaL_checkinteger(m_state, index.value()));
-        }
-        template<> int16_t at(stack_index const index) const noexcept {
-            return static_cast<int16_t>(luaL_checkinteger(m_state, index.value()));
-        }
-        template<> int32_t at(stack_index const index) const noexcept {
-            return static_cast<int32_t>(luaL_checkinteger(m_state, index.value()));
-        }
-        template<> int64_t at(stack_index const index) const noexcept {
-            if constexpr (sizeof(lua_Number) == sizeof(double)) {
-                return static_cast<int64_t>(luaL_checknumber(m_state, index.value())); // TODO: check
+        template<typename T> T at(stack_index const index) const noexcept {
+            if constexpr (std::is_same_v<T, bool>) {
+                return lua_toboolean(m_state, index.value()) != 0;
+            } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t>) {
+                return static_cast<T>(luaL_checkinteger(m_state, index.value()));
+            } else if constexpr (std::is_same_v<T, int64_t>) {
+                if constexpr (sizeof(lua_Number) == sizeof(double)) {
+                    return static_cast<int64_t>(luaL_checknumber(m_state, index.value())); // TODO: check
+                }
+                return luaL_checkinteger(m_state, index.value());
+            } else if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t>) {
+                return static_cast<T>(luaL_checkinteger(m_state, index.value()));
+            } else if constexpr (std::is_same_v<T, uint32_t>) {
+                if constexpr (sizeof(lua_Number) == sizeof(double)) {
+                    return static_cast<uint32_t>(luaL_checknumber(m_state, index.value())); // TODO: check
+                }
+                return static_cast<uint32_t>(luaL_checkinteger(m_state, index.value()));
+            } else if constexpr (std::is_same_v<T, uint64_t>) {
+                if constexpr (sizeof(lua_Number) == sizeof(double)) {
+                    return static_cast<uint64_t>(luaL_checknumber(m_state, index.value())); // TODO: check
+                }
+                return static_cast<uint64_t>(luaL_checkinteger(m_state, index.value()));
+            } else if constexpr (std::is_same_v<T, std::string_view>) {
+                size_t len{};
+                auto const str = luaL_checklstring(m_state, index.value(), &len);
+                return { str, len };
+            } else if constexpr (std::is_same_v<T, void*>) {
+                return lua_touserdata(m_state, index.value());
+            } else {
+                static_assert(!sizeof(T), "unsupported Lua stack value type");
             }
-            return luaL_checkinteger(m_state, index.value());
-        }
-        template<> uint8_t at(stack_index const index) const noexcept {
-            return static_cast<uint8_t>(luaL_checkinteger(m_state, index.value()));
-        }
-        template<> uint16_t at(stack_index const index) const noexcept {
-            return static_cast<uint16_t>(luaL_checkinteger(m_state, index.value()));
-        }
-        template<> uint32_t at(stack_index const index) const noexcept {
-            if constexpr (sizeof(lua_Number) == sizeof(double)) {
-                return static_cast<uint32_t>(luaL_checknumber(m_state, index.value())); // TODO: check
-            }
-            return static_cast<uint32_t>(luaL_checkinteger(m_state, index.value()));
-        }
-        template<> uint64_t at(stack_index const index) const noexcept {
-            if constexpr (sizeof(lua_Number) == sizeof(double)) {
-                return static_cast<uint64_t>(luaL_checknumber(m_state, index.value())); // TODO: check
-            }
-            return static_cast<uint64_t>(luaL_checkinteger(m_state, index.value()));
-        }
-        template<> std::string_view at(stack_index const index) const noexcept {
-            size_t len{};
-            auto const str = luaL_checklstring(m_state, index.value(), &len);
-            return { str, len };
-        }
-
-        template<> void* at(stack_index const index) const noexcept {
-            return lua_touserdata(m_state, index.value());
         }
 
         //template<typename T, typename Tag> T at(stack_index const index) const noexcept;
