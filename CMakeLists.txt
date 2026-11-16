@@ -57,23 +57,26 @@ function(luajit_target_setup target)
         C_STANDARD_REQUIRED ON
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED ON
+        POSITION_INDEPENDENT_CODE ON
     )
     target_compile_definitions(${target}
     PRIVATE
         _CRT_SECURE_NO_WARNINGS
     )
-    target_compile_options(${target}
-    PRIVATE
-        "/permissive-"
-        "/D_CRT_STDIO_INLINE=__declspec(dllexport)__inline"
-    )
-    if ((LUAJIT_ARCH STREQUAL "x86") OR (LUAJIT_ARCH STREQUAL "amd64"))
+    if (MSVC)
+        target_compile_options(${target}
+        PRIVATE
+            "/permissive-"
+            "/D_CRT_STDIO_INLINE=__declspec(dllexport)__inline"
+        )
+    endif ()
+    if (MSVC AND ((LUAJIT_ARCH STREQUAL "x86") OR (LUAJIT_ARCH STREQUAL "amd64")))
         target_compile_options(${target}
         PRIVATE
             "/sdl"
         )
     endif ()
-    if (LUAJIT_ENABLE_MORE_WARNING)
+    if (MSVC AND LUAJIT_ENABLE_MORE_WARNING)
         target_compile_options(${target}
         PRIVATE
             "/W4"
@@ -85,7 +88,7 @@ function(luajit_target_setup target)
             LUAJIT_ENABLE_LUA52COMPAT
         )
     endif ()
-    if (LUAJIT_ARCH STREQUAL "x86")
+    if (MSVC AND (LUAJIT_ARCH STREQUAL "x86"))
         target_compile_options(${target}
         PRIVATE
             "/arch:SSE2"
@@ -101,6 +104,9 @@ target_sources(minilua
 PRIVATE
     ${LUAJIT_ROOT}/src/host/minilua.c
 )
+if (NOT WIN32)
+    target_link_libraries(minilua PRIVATE m)
+endif ()
 
 # buildvm_arch
 
@@ -111,17 +117,21 @@ set(LUAJIT_BUILDVM_ARCH_H ${LUAJIT_BUILDVM_ARCH_H_DIR}/buildvm_arch.h)
 set(LUAJIT_DASC)
 
 if (LUAJIT_ARCH STREQUAL "amd64")
-    set(LUAJIT_DASM_FLAGS -D WIN -D JIT -D FFI -D ENDIAN_LE -D FPU -D P64)
+    set(LUAJIT_DASM_FLAGS -D JIT -D FFI -D ENDIAN_LE -D FPU -D P64)
     set(LUAJIT_DASC ${LUAJIT_ROOT}/src/vm_x64.dasc)
 elseif (LUAJIT_ARCH STREQUAL "arm64")
-    set(LUAJIT_DASM_FLAGS -D WIN -D JIT -D FFI -D ENDIAN_LE -D FPU -D P64)
+    set(LUAJIT_DASM_FLAGS -D JIT -D FFI -D ENDIAN_LE -D FPU -D P64)
     set(LUAJIT_DASC ${LUAJIT_ROOT}/src/vm_arm64.dasc)
 elseif (LUAJIT_ARCH STREQUAL "x86")
-    set(LUAJIT_DASM_FLAGS -D WIN -D JIT -D FFI -D ENDIAN_LE -D FPU)
+    set(LUAJIT_DASM_FLAGS -D JIT -D FFI -D ENDIAN_LE -D FPU)
     set(LUAJIT_DASC ${LUAJIT_ROOT}/src/vm_x86.dasc)
 else ()
     message(FATAL_ERROR "LuaJIT: what's your architecture?")
 endif ()   
+
+if (WIN32)
+    list(APPEND LUAJIT_DASM_FLAGS -D WIN)
+endif ()
 
 add_custom_command(
     OUTPUT ${LUAJIT_BUILDVM_ARCH_H}
@@ -190,10 +200,23 @@ set(LUAJIT_ALL_LIB
     ${LUAJIT_ROOT}/src/lib_buffer.c
 )
 
+if (WIN32)
+    set(LUAJIT_VM_OUTPUT ${LUAJIT_BUILDVM_OBJ_DIR}/lj_vm.obj)
+    set(LUAJIT_VM_FORMAT peobj)
+else ()
+    enable_language(ASM)
+    set(LUAJIT_VM_OUTPUT ${LUAJIT_BUILDVM_OBJ_DIR}/lj_vm.S)
+    if (APPLE)
+        set(LUAJIT_VM_FORMAT machasm)
+    else ()
+        set(LUAJIT_VM_FORMAT elfasm)
+    endif ()
+endif ()
+
 add_custom_command(
-    OUTPUT ${LUAJIT_BUILDVM_OBJ_DIR}/lj_vm.obj
+    OUTPUT ${LUAJIT_VM_OUTPUT}
     COMMAND cmake -E make_directory ${LUAJIT_BUILDVM_OBJ_DIR}
-    COMMAND $<TARGET_FILE:buildvm> -m peobj -o ${LUAJIT_BUILDVM_OBJ_DIR}/lj_vm.obj
+    COMMAND $<TARGET_FILE:buildvm> -m ${LUAJIT_VM_FORMAT} -o ${LUAJIT_VM_OUTPUT}
     DEPENDS buildvm
     VERBATIM
 )
@@ -250,7 +273,7 @@ add_custom_command(
 
 set(LUAJIT_LIB_GEN
     ${LUAJIT_TEMP}/luajit.h
-    ${LUAJIT_BUILDVM_OBJ_DIR}/lj_vm.obj
+    ${LUAJIT_VM_OUTPUT}
     ${LUAJIT_BUILDVM_OBJ_DIR}/lj_bcdef.h
     ${LUAJIT_BUILDVM_OBJ_DIR}/lj_ffdef.h
     ${LUAJIT_BUILDVM_OBJ_DIR}/lj_libdef.h
@@ -331,11 +354,14 @@ set(LUAJIT_LIB_SRC
     # patch
     ${LUAJIT_ROOT}/src/lib_utf8.c
     ${LUAJIT_ROOT}/src/lib_strpack.c
-    ${LUAJIT_ROOT}/src/lj_win32.c
     # libs
     ${LUAJIT_ROOT}/feature/fs/fs.h
     ${LUAJIT_ROOT}/feature/fs/fs.cpp
 )
+
+if (WIN32)
+    list(APPEND LUAJIT_LIB_SRC ${LUAJIT_ROOT}/src/lj_win32.c)
+endif ()
 
 add_library(lua51_static STATIC)
 luajit_target_setup(lua51_static)
@@ -357,10 +383,12 @@ PRIVATE
 
 add_library(lua51 SHARED)
 luajit_target_setup(lua51)
-target_compile_definitions(lua51
-PUBLIC
-    LUA_BUILD_AS_DLL
-)
+if (WIN32)
+    target_compile_definitions(lua51
+    PUBLIC
+        LUA_BUILD_AS_DLL
+    )
+endif ()
 target_include_directories(lua51
 PRIVATE
     ${LUAJIT_BUILDVM_OBJ_DIR}
@@ -374,6 +402,11 @@ PRIVATE
     ${LUAJIT_LIB_GEN}
     ${LUAJIT_LIB_SRC}
 )
+
+if (NOT WIN32)
+    target_link_libraries(lua51_static PRIVATE m ${CMAKE_DL_LIBS})
+    target_link_libraries(lua51 PRIVATE m ${CMAKE_DL_LIBS})
+endif ()
 
 # luajit
 
