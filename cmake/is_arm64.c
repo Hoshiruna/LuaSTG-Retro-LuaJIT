@@ -1,6 +1,4 @@
-#include <windows.h>
-
-#ifndef _ARM64_
+#if !defined(_M_ARM64) && !defined(__aarch64__)
 #error "ARE YOU ARM64?"
 #endif
 

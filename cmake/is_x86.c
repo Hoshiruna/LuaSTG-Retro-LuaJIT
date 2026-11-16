@@ -1,6 +1,4 @@
-#include <windows.h>
-
-#ifndef _X86_
+#if !defined(_M_IX86) && !defined(__i386__)
 #error "ARE YOU X86?"
 #endif
 
